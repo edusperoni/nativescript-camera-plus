@@ -105,14 +105,7 @@ export class SelectedAsset extends ImageAsset {
 
         // tODO handle non-primary volumes
       } else if (SelectedAsset.isDownloadsDocument(uri)) {
-        // downloadsProvider
-        const id = DocumentsContract().getDocumentId(uri);
-        const contentUri = android.content.ContentUris.withAppendedId(
-          android.net.Uri.parse('content://downloads/public_downloads'),
-          long(id)
-        );
-
-        return SelectedAsset.getDataColumn(contentUri, null, null);
+        return SelectedAsset.getDataColumn(uri, null, null, true);
       } else if (SelectedAsset.isMediaDocument(uri)) {
         // mediaProvider
         const docId = DocumentsContract().getDocumentId(uri);
@@ -132,12 +125,12 @@ export class SelectedAsset extends ImageAsset {
         const selection = '_id=?';
         const selectionArgs = [id];
 
-        return SelectedAsset.getDataColumn(contentUri, selection, selectionArgs);
+        return SelectedAsset.getDataColumn(contentUri, selection, selectionArgs, false);
       }
     } else {
       // mediaStore (and general)
       if ('content' === uri.getScheme()) {
-        return SelectedAsset.getDataColumn(uri, null, null);
+        return SelectedAsset.getDataColumn(uri, null, null, false);
       } else if ('file' === uri.getScheme()) {
         // file
         return uri.getPath();
@@ -147,29 +140,52 @@ export class SelectedAsset extends ImageAsset {
     return undefined;
   }
 
-  private static getDataColumn(uri: android.net.Uri, selection, selectionArgs) {
+  private static getDataColumn(uri: android.net.Uri, selection, selectionArgs, isDownload: boolean) {
     let cursor = null;
-    const columns = [MediaStore().MediaColumns.DATA];
-
     let filePath;
-
-    try {
-      cursor = this.getContentResolver().query(uri, columns, selection, selectionArgs, null);
-      if (cursor != null && cursor.moveToFirst()) {
-        const column_index = cursor.getColumnIndexOrThrow(columns[0]);
-        filePath = cursor.getString(column_index);
-        if (filePath) {
-          return filePath;
+    if (isDownload) {
+      let columns = ['_display_name'];
+      try {
+        cursor = this.getContentResolver().query(uri, columns, selection, selectionArgs, null);
+        if (cursor != null && cursor.moveToFirst()) {
+          let column_index = cursor.getColumnIndexOrThrow(columns[0]);
+          filePath = cursor.getString(column_index);
+          if (filePath) {
+            const dl = android.os.Environment.getExternalStoragePublicDirectory(
+              android.os.Environment.DIRECTORY_DOWNLOADS
+            );
+            filePath = `${dl}/${filePath}`;
+            return filePath;
+          }
+        }
+      } catch (e) {
+        console.log(e);
+      } finally {
+        if (cursor) {
+          cursor.close();
         }
       }
-    } catch (e) {
-      console.log(e);
-    } finally {
-      if (cursor) {
-        cursor.close();
+    } else {
+      let columns = [android.provider.MediaStore.MediaColumns.DATA];
+      let filePath;
+
+      try {
+        cursor = this.getContentResolver().query(uri, columns, selection, selectionArgs, null);
+        if (cursor != null && cursor.moveToFirst()) {
+          let column_index = cursor.getColumnIndexOrThrow(columns[0]);
+          filePath = cursor.getString(column_index);
+          if (filePath) {
+            return filePath;
+          }
+        }
+      } catch (e) {
+        console.log(e);
+      } finally {
+        if (cursor) {
+          cursor.close();
+        }
       }
     }
-
     return undefined;
   }
 
